@@ -103,6 +103,17 @@
   }
   .copy-btn.copied { background: var(--accent); color: #fff; }
   .toolbar { margin-top: 18px; display: flex; gap: 10px; }
+  .key-gate {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 24px;
+  }
+  .key-gate p { margin: 0 0 10px; font-size: 0.9rem; color: var(--muted); }
+  .key-gate p a { color: var(--accent); }
+  .key-row { display: flex; gap: 8px; }
+  .key-row input { margin-bottom: 0; }
   .error-box {
     margin-top: 16px;
     background: var(--error-bg);
@@ -120,6 +131,14 @@
 <div class="wrap">
   <h1>Comment Reply Assistant</h1>
   <p class="subtitle">Paste a comment from the channel and get a few AI-written reply options that respond to what they actually said and end with a question — so the conversation keeps going.</p>
+
+  <div class="key-gate" id="keyGate">
+    <p>One-time setup: paste your free Gemini API key to enable AI replies on this device. Get one at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com/app/apikey</a> (no credit card needed). This is saved only in this browser — you won't need to enter it again here.</p>
+    <div class="key-row">
+      <input type="text" id="apiKey" placeholder="AIza...">
+      <button class="primary" id="saveKeyBtn">OK</button>
+    </div>
+  </div>
 
   <label for="commenterName">Commenter's name (optional)</label>
   <input type="text" id="commenterName" placeholder="e.g. Maria">
@@ -143,8 +162,12 @@
 
 <script>
 (function () {
-  const API_KEY = 'AQ.Ab8RN6Ia10pcST-f542OUHWd7bEO3nXfhv61HS6almttcoiFvQ';
   const MODEL = 'gemini-3.6-flash';
+  const KEY_STORAGE = 'reply-assistant-gemini-key';
+
+  const keyGate = document.getElementById('keyGate');
+  const apiKeyEl = document.getElementById('apiKey');
+  const saveKeyBtn = document.getElementById('saveKeyBtn');
 
   const commentEl = document.getElementById('comment');
   const nameEl = document.getElementById('commenterName');
@@ -164,13 +187,37 @@
     errorBox.textContent = '';
   }
 
+  function getStoredKey() {
+    return localStorage.getItem(KEY_STORAGE) || '';
+  }
+
+  function refreshKeyGate() {
+    keyGate.style.display = getStoredKey() ? 'none' : 'block';
+  }
+
+  saveKeyBtn.addEventListener('click', () => {
+    const k = apiKeyEl.value.trim();
+    if (!k) {
+      apiKeyEl.focus();
+      return;
+    }
+    localStorage.setItem(KEY_STORAGE, k);
+    refreshKeyGate();
+  });
+
+  apiKeyEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveKeyBtn.click();
+  });
+
+  refreshKeyGate();
+
   const CHANNEL_CONTEXT = `Background on this channel (steverother.org), for context only — don't force any of this into every reply, only draw on it when it's naturally relevant to what the commenter said:
 - Steve Rother channels "The Group," a collective of non-physical guides; the channel shares their messages on soul evolution, higher consciousness, and navigating change.
 - Recurring themes: soul contracts made before this life, inner-child healing, energetic/generational trauma and imprints, multidimensional awareness, living authentically, and stepping into personal power.
 - Recurring programs/language: the "Mystic Zone," the monthly "Beacons of Light" messages, "Espavo" (a term of gratitude/honoring used in the community), and referring to returning to one's true self as coming "Home."
 - Audience tends to be people on a spiritual/personal-growth path, often processing something emotionally significant in their comments.`;
 
-  async function callGemini(comment, name) {
+  async function callGemini(apiKey, comment, name) {
     const system = `You are helping a co-owner of a YouTube channel reply to a viewer's comment.
 
 ${CHANNEL_CONTEXT}
@@ -193,7 +240,7 @@ Respond with ONLY a valid JSON array of exactly 6 strings (the reply options), o
 
     const userContent = `Commenter name: ${name || '(not given)'}\nComment: """${comment}"""`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent?key=${encodeURIComponent(API_KEY)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     const res = await fetch(url, {
       method: 'POST',
@@ -294,6 +341,13 @@ Respond with ONLY a valid JSON array of exactly 6 strings (the reply options), o
       commentEl.focus();
       return;
     }
+    const apiKey = getStoredKey();
+    if (!apiKey) {
+      refreshKeyGate();
+      keyGate.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      apiKeyEl.focus();
+      return;
+    }
     const name = nameEl.value.trim();
 
     clearError();
@@ -304,7 +358,7 @@ Respond with ONLY a valid JSON array of exactly 6 strings (the reply options), o
     loadingEl.style.display = 'block';
 
     try {
-      const replies = await callGemini(comment, name);
+      const replies = await callGemini(apiKey, comment, name);
       renderResults(replies);
     } catch (err) {
       showError(err.message || String(err));
