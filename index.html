@@ -39,10 +39,9 @@
   }
   .wrap { max-width: 720px; margin: 0 auto; }
   h1 { font-size: 1.5rem; margin-bottom: 4px; }
-  h2 { font-size: 1rem; margin: 0; }
   .subtitle { color: var(--muted); margin-top: 0; margin-bottom: 24px; font-size: 0.95rem; }
   label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; }
-  textarea, input[type=text], input[type=password], select {
+  textarea, input[type=text] {
     width: 100%;
     font-family: inherit;
     font-size: 1rem;
@@ -54,38 +53,7 @@
     resize: vertical;
   }
   textarea { min-height: 110px; margin-bottom: 16px; }
-  input[type=text], input[type=password], select { margin-bottom: 10px; }
-  .row { display: flex; gap: 16px; flex-wrap: wrap; }
-  .row > div { flex: 1; min-width: 160px; }
-  details.panel {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 4px 20px;
-    margin-top: 32px;
-  }
-  details.panel[open] { padding-bottom: 18px; }
-  details.panel summary {
-    cursor: pointer;
-    padding: 14px 0;
-    font-weight: 600;
-    font-size: 0.95rem;
-    list-style: none;
-  }
-  details.panel summary::-webkit-details-marker { display: none; }
-  details.panel summary::before { content: '⚙ '; }
-  details.panel .panel-body { padding-top: 4px; }
-  .key-row { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
-  .key-row input { margin-bottom: 0; }
-  .hint { color: var(--muted); font-size: 0.82rem; margin: 6px 0 0; }
-  .hint a { color: var(--accent); }
-  .needs-key-note {
-    display: none;
-    color: var(--accent);
-    font-size: 0.88rem;
-    margin: 10px 0 0;
-  }
-  .needs-key-note a { color: inherit; font-weight: 600; }
+  input[type=text] { margin-bottom: 10px; }
   button.primary {
     background: var(--accent);
     color: #fff;
@@ -109,8 +77,6 @@
     white-space: nowrap;
   }
   button.ghost:disabled { opacity: 0.5; cursor: not-allowed; }
-  .status { font-size: 0.82rem; margin-left: 4px; }
-  .status.ok { color: #3a7d3a; }
   #results { margin-top: 24px; display: flex; flex-direction: column; gap: 14px; }
   .card {
     background: var(--card);
@@ -162,7 +128,6 @@
   <textarea id="comment" placeholder="Paste the YouTube comment here..."></textarea>
 
   <button class="primary" id="generateBtn">Generate replies</button>
-  <p class="needs-key-note" id="needsKeyNote">No API key set up yet — <a href="#apiSettings" id="needsKeyLink">add your free Gemini key below</a> (takes about a minute, one-time).</p>
 
   <div class="loading" id="loading" style="display:none;">Thinking…</div>
   <div class="error-box" id="errorBox" style="display:none;"></div>
@@ -173,44 +138,13 @@
     <button class="ghost" id="regenBtn">Generate again</button>
   </div>
 
-  <details class="panel" id="apiSettings">
-    <summary>API settings</summary>
-    <div class="panel-body">
-      <h2>Google Gemini API key (free)</h2>
-      <p class="hint" style="margin-top:6px;">This only needs to be set up once per browser/device.</p>
-      <div class="key-row" style="margin-top:10px;">
-        <input type="password" id="apiKey" placeholder="AIza...">
-        <button class="ghost" id="saveKeyBtn">Save</button>
-        <button class="ghost" id="clearKeyBtn">Clear</button>
-      </div>
-      <span class="status" id="keyStatus"></span>
-      <p class="hint">Stored only in this browser (localStorage) — never sent anywhere except directly to Google. Get a free key (no credit card needed) at <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">aistudio.google.com/app/apikey</a>. Everyone using this page needs their own free key, pasted in once on their own device.</p>
-
-      <label for="model" style="margin-top:14px;">Model</label>
-      <select id="model">
-        <option value="gemini-3.6-flash" selected>Gemini 3.6 Flash (recommended)</option>
-        <option value="gemini-2.0-flash">Gemini 2.0 Flash (fallback if 2.5 errors)</option>
-        <option value="gemini-2.5-pro">Gemini 2.5 Pro (higher quality, lower free quota)</option>
-      </select>
-      <p class="hint">If a model shows a "not found" error, your key's free tier may not include it yet — try another option from this list.</p>
-    </div>
-  </details>
-
   <footer>For internal use replying to comments on Steve Rother's channel.</footer>
 </div>
 
 <script>
 (function () {
-  const KEY_STORAGE = 'reply-assistant-gemini-key';
-
-  const settingsPanel = document.getElementById('apiSettings');
-  const apiKeyEl = document.getElementById('apiKey');
-  const saveKeyBtn = document.getElementById('saveKeyBtn');
-  const clearKeyBtn = document.getElementById('clearKeyBtn');
-  const keyStatus = document.getElementById('keyStatus');
-  const modelEl = document.getElementById('model');
-  const needsKeyNote = document.getElementById('needsKeyNote');
-  const needsKeyLink = document.getElementById('needsKeyLink');
+  const API_KEY = 'AQ.Ab8RN6Ia10pcST-f542OUHWd7bEO3nXfhv61HS6almttcoiFvQ';
+  const MODEL = 'gemini-3.6-flash';
 
   const commentEl = document.getElementById('comment');
   const nameEl = document.getElementById('commenterName');
@@ -221,54 +155,6 @@
   const loadingEl = document.getElementById('loading');
   const errorBox = document.getElementById('errorBox');
 
-  function hasKey() {
-    return !!apiKeyEl.value.trim();
-  }
-
-  function refreshNeedsKeyNote() {
-    needsKeyNote.style.display = hasKey() ? 'none' : 'block';
-  }
-
-  function loadKey() {
-    const k = localStorage.getItem(KEY_STORAGE) || '';
-    if (k) {
-      apiKeyEl.value = k;
-      keyStatus.textContent = 'Key saved ✓';
-      keyStatus.className = 'status ok';
-      settingsPanel.open = false;
-    } else {
-      settingsPanel.open = true;
-    }
-    refreshNeedsKeyNote();
-  }
-
-  saveKeyBtn.addEventListener('click', () => {
-    const k = apiKeyEl.value.trim();
-    if (!k) return;
-    localStorage.setItem(KEY_STORAGE, k);
-    keyStatus.textContent = 'Key saved ✓';
-    keyStatus.className = 'status ok';
-    refreshNeedsKeyNote();
-    settingsPanel.open = false;
-  });
-
-  clearKeyBtn.addEventListener('click', () => {
-    localStorage.removeItem(KEY_STORAGE);
-    apiKeyEl.value = '';
-    keyStatus.textContent = 'Key cleared';
-    keyStatus.className = 'status';
-    refreshNeedsKeyNote();
-  });
-
-  needsKeyLink.addEventListener('click', (e) => {
-    e.preventDefault();
-    settingsPanel.open = true;
-    settingsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    apiKeyEl.focus();
-  });
-
-  loadKey();
-
   function showError(msg) {
     errorBox.textContent = msg;
     errorBox.style.display = 'block';
@@ -278,7 +164,7 @@
     errorBox.textContent = '';
   }
 
-  async function callGemini(apiKey, model, comment, name) {
+  async function callGemini(comment, name) {
     const system = `You are helping a co-owner of a YouTube channel reply to a viewer's comment.
 
 Write reply options that:
@@ -292,7 +178,7 @@ Respond with ONLY a valid JSON array of exactly 3 strings (the reply options). N
 
     const userContent = `Commenter name: ${name || '(not given)'}\nComment: """${comment}"""`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(MODEL)}:generateContent?key=${encodeURIComponent(API_KEY)}`;
 
     const res = await fetch(url, {
       method: 'POST',
@@ -393,16 +279,7 @@ Respond with ONLY a valid JSON array of exactly 3 strings (the reply options). N
       commentEl.focus();
       return;
     }
-    const apiKey = apiKeyEl.value.trim();
-    if (!apiKey) {
-      settingsPanel.open = true;
-      settingsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      showError('Add your free Gemini API key in API settings below first.');
-      apiKeyEl.focus();
-      return;
-    }
     const name = nameEl.value.trim();
-    const model = modelEl.value;
 
     clearError();
     resultsEl.innerHTML = '';
@@ -412,7 +289,7 @@ Respond with ONLY a valid JSON array of exactly 3 strings (the reply options). N
     loadingEl.style.display = 'block';
 
     try {
-      const replies = await callGemini(apiKey, model, comment, name);
+      const replies = await callGemini(comment, name);
       renderResults(replies);
     } catch (err) {
       showError(err.message || String(err));
