@@ -164,12 +164,21 @@
     errorBox.textContent = '';
   }
 
+  const CHANNEL_CONTEXT = `Background on this channel (steverother.org), for context only — don't force any of this into every reply, only draw on it when it's naturally relevant to what the commenter said:
+- Steve Rother channels "The Group," a collective of non-physical guides; the channel shares their messages on soul evolution, higher consciousness, and navigating change.
+- Recurring themes: soul contracts made before this life, inner-child healing, energetic/generational trauma and imprints, multidimensional awareness, living authentically, and stepping into personal power.
+- Recurring programs/language: the "Mystic Zone," the monthly "Beacons of Light" messages, "Espavo" (a term of gratitude/honoring used in the community), and referring to returning to one's true self as coming "Home."
+- Audience tends to be people on a spiritual/personal-growth path, often processing something emotionally significant in their comments.`;
+
   async function callGemini(comment, name) {
     const system = `You are helping a co-owner of a YouTube channel reply to a viewer's comment.
+
+${CHANNEL_CONTEXT}
 
 Write reply options that:
 - Specifically acknowledge something the commenter actually said — reference their words or point, don't be generic
 - Sound warm, natural, and conversational, like a real person typing a quick reply — not corporate, not AI-sounding
+- Where genuinely relevant, reflect the channel's world and language above — but never invent claims about a specific video's content, and never force in jargon that doesn't fit what the commenter actually said
 - End with an open-ended question that invites the commenter to keep the conversation going
 - Are short: 1-3 sentences
 - Are meaningfully different from each other in angle, tone, and opening — not just reworded copies
