@@ -13,6 +13,8 @@
     --accent: #b5651d;
     --accent-soft: #f1e3d3;
     --border: #e7ddcf;
+    --error-bg: #fbeaea;
+    --error-text: #8a2b2b;
   }
   @media (prefers-color-scheme: dark) {
     :root {
@@ -23,6 +25,8 @@
       --accent: #e0925a;
       --accent-soft: #3a2f24;
       --border: #3a352e;
+      --error-bg: #3a2323;
+      --error-text: #f0a5a5;
     }
   }
   * { box-sizing: border-box; }
@@ -35,9 +39,10 @@
   }
   .wrap { max-width: 720px; margin: 0 auto; }
   h1 { font-size: 1.5rem; margin-bottom: 4px; }
-  .subtitle { color: var(--muted); margin-top: 0; margin-bottom: 28px; font-size: 0.95rem; }
+  h2 { font-size: 1rem; margin: 0 0 10px; }
+  .subtitle { color: var(--muted); margin-top: 0; margin-bottom: 24px; font-size: 0.95rem; }
   label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; }
-  textarea, input[type=text] {
+  textarea, input[type=text], input[type=password], select {
     width: 100%;
     font-family: inherit;
     font-size: 1rem;
@@ -49,9 +54,20 @@
     resize: vertical;
   }
   textarea { min-height: 110px; margin-bottom: 16px; }
-  input[type=text] { margin-bottom: 20px; }
+  input[type=text], input[type=password], select { margin-bottom: 10px; }
   .row { display: flex; gap: 16px; flex-wrap: wrap; }
   .row > div { flex: 1; min-width: 160px; }
+  section.panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 24px;
+  }
+  .key-row { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+  .key-row input { margin-bottom: 0; }
+  .hint { color: var(--muted); font-size: 0.82rem; margin: 6px 0 0; }
+  .hint a { color: var(--accent); }
   button.primary {
     background: var(--accent);
     color: #fff;
@@ -63,6 +79,7 @@
     cursor: pointer;
   }
   button.primary:hover { filter: brightness(1.05); }
+  button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
   button.ghost {
     background: transparent;
     color: var(--accent);
@@ -71,8 +88,12 @@
     border-radius: 8px;
     font-size: 0.85rem;
     cursor: pointer;
+    white-space: nowrap;
   }
-  #results { margin-top: 32px; display: flex; flex-direction: column; gap: 14px; }
+  button.ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { font-size: 0.82rem; margin-left: 4px; }
+  .status.ok { color: #3a7d3a; }
+  #results { margin-top: 24px; display: flex; flex-direction: column; gap: 14px; }
   .card {
     background: var(--card);
     border: 1px solid var(--border);
@@ -98,14 +119,41 @@
   }
   .copy-btn.copied { background: var(--accent); color: #fff; }
   .toolbar { margin-top: 18px; display: flex; gap: 10px; }
-  .hint { color: var(--muted); font-size: 0.82rem; margin-top: 6px; }
+  .error-box {
+    margin-top: 16px;
+    background: var(--error-bg);
+    color: var(--error-text);
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    white-space: pre-wrap;
+  }
+  .loading { color: var(--muted); font-size: 0.9rem; margin-top: 16px; }
   footer { margin-top: 48px; color: var(--muted); font-size: 0.78rem; text-align: center; }
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Comment Reply Assistant</h1>
-  <p class="subtitle">Paste a comment from the channel, get a few reply options that acknowledge what they said and end with a question — so the conversation keeps going.</p>
+  <p class="subtitle">Paste a comment from the channel and get a few AI-written reply options that respond to what they actually said and end with a question — so the conversation keeps going.</p>
+
+  <section class="panel">
+    <h2>Claude API key</h2>
+    <div class="key-row">
+      <input type="password" id="apiKey" placeholder="sk-ant-...">
+      <button class="ghost" id="saveKeyBtn">Save</button>
+      <button class="ghost" id="clearKeyBtn">Clear</button>
+    </div>
+    <span class="status" id="keyStatus"></span>
+    <p class="hint">Stored only in your browser (localStorage) — never sent anywhere except directly to Anthropic. Get a key at <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>. Only use this on a device/browser you trust, since the key is visible in this page's dev tools.</p>
+
+    <label for="model" style="margin-top:14px;">Model</label>
+    <select id="model">
+      <option value="claude-sonnet-5" selected>Claude Sonnet 5 (recommended)</option>
+      <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (faster, cheaper)</option>
+      <option value="claude-opus-5">Claude Opus 5 (highest quality)</option>
+    </select>
+  </section>
 
   <label for="commenterName">Commenter's name (optional)</label>
   <input type="text" id="commenterName" placeholder="e.g. Maria">
@@ -115,10 +163,13 @@
 
   <button class="primary" id="generateBtn">Generate replies</button>
 
+  <div class="loading" id="loading" style="display:none;">Thinking…</div>
+  <div class="error-box" id="errorBox" style="display:none;"></div>
+
   <div id="results"></div>
 
   <div class="toolbar" id="regenWrap" style="display:none;">
-    <button class="ghost" id="regenBtn">Try different options</button>
+    <button class="ghost" id="regenBtn">Generate again</button>
   </div>
 
   <footer>For internal use replying to comments on Steve Rother's channel.</footer>
@@ -126,119 +177,118 @@
 
 <script>
 (function () {
+  const KEY_STORAGE = 'reply-assistant-claude-key';
+
+  const apiKeyEl = document.getElementById('apiKey');
+  const saveKeyBtn = document.getElementById('saveKeyBtn');
+  const clearKeyBtn = document.getElementById('clearKeyBtn');
+  const keyStatus = document.getElementById('keyStatus');
+  const modelEl = document.getElementById('model');
+
   const commentEl = document.getElementById('comment');
   const nameEl = document.getElementById('commenterName');
   const generateBtn = document.getElementById('generateBtn');
   const regenBtn = document.getElementById('regenBtn');
   const regenWrap = document.getElementById('regenWrap');
   const resultsEl = document.getElementById('results');
+  const loadingEl = document.getElementById('loading');
+  const errorBox = document.getElementById('errorBox');
 
-  function cap(s) {
-    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  function loadKey() {
+    const k = localStorage.getItem(KEY_STORAGE) || '';
+    if (k) {
+      apiKeyEl.value = k;
+      keyStatus.textContent = 'Key saved ✓';
+      keyStatus.className = 'status ok';
+    }
   }
 
-  function greet(name) {
-    return name ? `${name} — ` : '';
+  saveKeyBtn.addEventListener('click', () => {
+    const k = apiKeyEl.value.trim();
+    if (!k) return;
+    localStorage.setItem(KEY_STORAGE, k);
+    keyStatus.textContent = 'Key saved ✓';
+    keyStatus.className = 'status ok';
+  });
+
+  clearKeyBtn.addEventListener('click', () => {
+    localStorage.removeItem(KEY_STORAGE);
+    apiKeyEl.value = '';
+    keyStatus.textContent = 'Key cleared';
+    keyStatus.className = 'status';
+  });
+
+  loadKey();
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.style.display = 'block';
+  }
+  function clearError() {
+    errorBox.style.display = 'none';
+    errorBox.textContent = '';
   }
 
-  function extractEcho(comment) {
-    const text = comment.trim();
-    if (!text) return null;
-    const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean);
-    if (!sentences.length) return null;
+  async function callClaude(apiKey, model, comment, name) {
+    const system = `You are helping a co-owner of a YouTube channel reply to a viewer's comment.
 
-    const scored = sentences.map(s => {
-      const words = s.split(/\s+/).filter(Boolean);
-      return { s, words, len: words.length };
+Write reply options that:
+- Specifically acknowledge something the commenter actually said — reference their words or point, don't be generic
+- Sound warm, natural, and conversational, like a real person typing a quick reply — not corporate, not AI-sounding
+- End with an open-ended question that invites the commenter to keep the conversation going
+- Are short: 1-3 sentences
+- Are meaningfully different from each other in angle, tone, and opening — not just reworded copies
+
+Respond with ONLY a valid JSON array of exactly 3 strings (the reply options). No markdown, no code fences, no extra commentary, no explanation — just the JSON array.`;
+
+    const userContent = `Commenter name: ${name || '(not given)'}\nComment: """${comment}"""`;
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 700,
+        system,
+        messages: [{ role: 'user', content: userContent }]
+      })
     });
-    scored.sort((a, b) => b.len - a.len);
-    const core = scored.find(x => x.len > 4) || scored[0];
-    if (!core || core.len < 2) return null;
 
-    let clipped = core.words.slice(0, 12).join(' ');
-    clipped = clipped.replace(/^(and|but|so|because|that|which)\s+/i, '');
-    clipped = clipped.replace(/[.?!,;:]+$/, '');
-    if (!clipped) return null;
-    clipped = clipped.charAt(0).toLowerCase() + clipped.slice(1);
-    if (core.words.length > 12) clipped += '…';
-    return clipped;
-  }
-
-  function classify(comment) {
-    const lower = comment.toLowerCase();
-    const wordCount = comment.trim().split(/\s+/).filter(Boolean).length;
-    const hasQuestion = /\?/.test(comment);
-    const gratitudeWords = ['thank', 'grateful', 'appreciate', 'blessed', 'love this', 'love you', 'love it'];
-    const storyWords = ['i was', 'i had', 'i went through', 'years ago', 'since i', 'my life', 'i used to',
-      'i started', 'i began', 'changed my', 'helped me', 'cried', 'struggl', 'lost my', 'diagnosed'];
-    const hasGratitude = gratitudeWords.some(w => lower.includes(w));
-    const hasStory = storyWords.some(w => lower.includes(w)) || wordCount > 30;
-
-    if (hasQuestion) return 'question';
-    if (hasStory) return 'story';
-    if (hasGratitude) return 'gratitude';
-    if (wordCount <= 6) return 'short';
-    return 'general';
-  }
-
-  const TEMPLATES = {
-    gratitude: [
-      (e, n) => `${greet(n)}Thank you so much for this${e ? ` — especially what you said about ${e}` : ''}. What's shifted for you since ${e ? 'then' : 'watching'}?`,
-      (e, n) => `${greet(n)}This made our day.${e ? ` The part about ${e} really stuck with us.` : ''} What's been the biggest takeaway for you so far?`,
-      (e, n) => `${greet(n)}We're so grateful you took the time to share this.${e ? ` Especially ${e} —` : ''} what drew you to this video in the first place?`,
-      (e, n) => `${greet(n)}Thank you!${e ? ` Hearing about ${e} means a lot.` : ''} Is there a topic you'd love us to dig into next?`
-    ],
-    story: [
-      (e, n) => `${greet(n)}Thank you for trusting us with that.${e ? ` What you shared about ${e} really lands.` : ''} How are you feeling about it these days?`,
-      (e, n) => `${greet(n)}That's a big share, and we don't take it lightly.${e ? ` ${cap(e)} sounds like it's been quite a journey.` : ''} What's the next step looking like for you?`,
-      (e, n) => `${greet(n)}It means a lot that you shared this with us.${e ? ` ${cap(e)} —` : ''} what's changed the most for you since then?`,
-      (e, n) => `${greet(n)}Thank you for opening up like that.${e ? ` We're sitting with what you said about ${e}.` : ''} What's been most helpful for you along the way?`
-    ],
-    question: [
-      (e, n) => `${greet(n)}Great question!${e ? ` Before we jump in — on ${e},` : ' Before we jump in —'} what's your gut telling you already?`,
-      (e, n) => `${greet(n)}Love that you asked. What made you curious about ${e || 'that'} specifically?`,
-      (e, n) => `${greet(n)}That's a good one.${e ? ` On ${e} —` : ''} have you noticed anything yourself that points toward an answer?`,
-      (e, n) => `${greet(n)}Appreciate you asking!${e ? ` Quick one back on ${e} —` : ''} is this something you're working through right now, or more out of curiosity?`
-    ],
-    short: [
-      (e, n) => `${greet(n)}Thank you! What part landed the most for you?`,
-      (e, n) => `${greet(n)}Appreciate you watching! Anything you'd like us to go deeper on next time?`,
-      (e, n) => `${greet(n)}Means a lot, thank you. What brought you to this one?`,
-      (e, n) => `${greet(n)}So glad it resonated! What's on your mind these days?`
-    ],
-    general: [
-      (e, n) => `${greet(n)}Thank you for sharing that.${e ? ` ${cap(e)} really stood out.` : ''} What's on your mind about it now?`,
-      (e, n) => `${greet(n)}Appreciate you taking the time to comment.${e ? ` ${cap(e)} —` : ''} what made you think of that?`,
-      (e, n) => `${greet(n)}Thanks for this!${e ? ` We hear you on ${e}.` : ''} What would be most helpful to explore next?`,
-      (e, n) => `${greet(n)}Really glad this reached you.${e ? ` Curious about ${e} —` : ''} how long has that been on your mind?`
-    ]
-  };
-
-  function normalize(str) {
-    return str.replace(/\s+/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
-  }
-
-  function shuffle(arr) {
-    const a = arr.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
-
-  function buildReplies(comment, name) {
-    const echo = extractEcho(comment);
-    const category = classify(comment);
-    const primaryPool = TEMPLATES[category];
-    const fallbackPool = TEMPLATES.general.filter(fn => !primaryPool.includes(fn));
-
-    const pool = shuffle(primaryPool).slice(0, 3);
-    if (pool.length < 3 && fallbackPool.length) {
-      pool.push(...shuffle(fallbackPool).slice(0, 3 - pool.length));
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const errJson = await res.json();
+        detail = errJson.error && errJson.error.message ? errJson.error.message : JSON.stringify(errJson);
+      } catch (e) {
+        detail = await res.text().catch(() => '');
+      }
+      throw new Error(`API error ${res.status}: ${detail}`);
     }
 
-    return pool.map(fn => normalize(fn(echo, name)));
+    const data = await res.json();
+    const text = data.content && data.content[0] && data.content[0].text;
+    if (!text) throw new Error('No content returned from the API.');
+
+    let replies;
+    try {
+      replies = JSON.parse(text);
+    } catch (e) {
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) {
+        replies = JSON.parse(match[0]);
+      } else {
+        throw new Error('Could not parse the AI response as JSON:\n' + text);
+      }
+    }
+    if (!Array.isArray(replies) || !replies.length) {
+      throw new Error('Unexpected response format from the AI.');
+    }
+    return replies;
   }
 
   function renderResults(replies) {
@@ -291,14 +341,38 @@
     done();
   }
 
-  function generate() {
+  async function generate() {
     const comment = commentEl.value.trim();
     if (!comment) {
       commentEl.focus();
       return;
     }
+    const apiKey = apiKeyEl.value.trim();
+    if (!apiKey) {
+      showError('Add your Claude API key above first.');
+      apiKeyEl.focus();
+      return;
+    }
     const name = nameEl.value.trim();
-    renderResults(buildReplies(comment, name));
+    const model = modelEl.value;
+
+    clearError();
+    resultsEl.innerHTML = '';
+    regenWrap.style.display = 'none';
+    generateBtn.disabled = true;
+    regenBtn.disabled = true;
+    loadingEl.style.display = 'block';
+
+    try {
+      const replies = await callClaude(apiKey, model, comment, name);
+      renderResults(replies);
+    } catch (err) {
+      showError(err.message || String(err));
+    } finally {
+      loadingEl.style.display = 'none';
+      generateBtn.disabled = false;
+      regenBtn.disabled = false;
+    }
   }
 
   generateBtn.addEventListener('click', generate);
