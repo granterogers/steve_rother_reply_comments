@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reply Assistant</title>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --card: #ffffff;
+    --text: #2a2622;
+    --muted: #746b60;
+    --accent: #b5651d;
+    --accent-soft: #f1e3d3;
+    --border: #e7ddcf;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1a17;
+      --card: #262320;
+      --text: #f1ece4;
+      --muted: #b3a99c;
+      --accent: #e0925a;
+      --accent-soft: #3a2f24;
+      --border: #3a352e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 32px 16px 80px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; }
+  .subtitle { color: var(--muted); margin-top: 0; margin-bottom: 28px; font-size: 0.95rem; }
+  label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; }
+  textarea, input[type=text] {
+    width: 100%;
+    font-family: inherit;
+    font-size: 1rem;
+    padding: 12px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    resize: vertical;
+  }
+  textarea { min-height: 110px; margin-bottom: 16px; }
+  input[type=text] { margin-bottom: 20px; }
+  .row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row > div { flex: 1; min-width: 160px; }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.primary:hover { filter: brightness(1.05); }
+  button.ghost {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  #results { margin-top: 32px; display: flex; flex-direction: column; gap: 14px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .card p { margin: 0; line-height: 1.5; }
+  .copy-btn {
+    flex-shrink: 0;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .copy-btn.copied { background: var(--accent); color: #fff; }
+  .toolbar { margin-top: 18px; display: flex; gap: 10px; }
+  .hint { color: var(--muted); font-size: 0.82rem; margin-top: 6px; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 0.78rem; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Comment Reply Assistant</h1>
+  <p class="subtitle">Paste a comment from the channel, get a few reply options that acknowledge what they said and end with a question — so the conversation keeps going.</p>
+
+  <label for="commenterName">Commenter's name (optional)</label>
+  <input type="text" id="commenterName" placeholder="e.g. Maria">
+
+  <label for="comment">Their comment</label>
+  <textarea id="comment" placeholder="Paste the YouTube comment here..."></textarea>
+
+  <button class="primary" id="generateBtn">Generate replies</button>
+
+  <div id="results"></div>
+
+  <div class="toolbar" id="regenWrap" style="display:none;">
+    <button class="ghost" id="regenBtn">Try different options</button>
+  </div>
+
+  <footer>For internal use replying to comments on Steve Rother's channel.</footer>
+</div>
+
+<script>
+(function () {
+  const commentEl = document.getElementById('comment');
+  const nameEl = document.getElementById('commenterName');
+  const generateBtn = document.getElementById('generateBtn');
+  const regenBtn = document.getElementById('regenBtn');
+  const regenWrap = document.getElementById('regenWrap');
+  const resultsEl = document.getElementById('results');
+
+  function cap(s) {
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  }
+
+  function greet(name) {
+    return name ? `${name} — ` : '';
+  }
+
+  function extractEcho(comment) {
+    const text = comment.trim();
+    if (!text) return null;
+    const sentences = text.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(Boolean);
+    if (!sentences.length) return null;
+
+    const scored = sentences.map(s => {
+      const words = s.split(/\s+/).filter(Boolean);
+      return { s, words, len: words.length };
+    });
+    scored.sort((a, b) => b.len - a.len);
+    const core = scored.find(x => x.len > 4) || scored[0];
+    if (!core || core.len < 2) return null;
+
+    let clipped = core.words.slice(0, 12).join(' ');
+    clipped = clipped.replace(/^(and|but|so|because|that|which)\s+/i, '');
+    clipped = clipped.replace(/[.?!,;:]+$/, '');
+    if (!clipped) return null;
+    clipped = clipped.charAt(0).toLowerCase() + clipped.slice(1);
+    if (core.words.length > 12) clipped += '…';
+    return clipped;
+  }
+
+  function classify(comment) {
+    const lower = comment.toLowerCase();
+    const wordCount = comment.trim().split(/\s+/).filter(Boolean).length;
+    const hasQuestion = /\?/.test(comment);
+    const gratitudeWords = ['thank', 'grateful', 'appreciate', 'blessed', 'love this', 'love you', 'love it'];
+    const storyWords = ['i was', 'i had', 'i went through', 'years ago', 'since i', 'my life', 'i used to',
+      'i started', 'i began', 'changed my', 'helped me', 'cried', 'struggl', 'lost my', 'diagnosed'];
+    const hasGratitude = gratitudeWords.some(w => lower.includes(w));
+    const hasStory = storyWords.some(w => lower.includes(w)) || wordCount > 30;
+
+    if (hasQuestion) return 'question';
+    if (hasStory) return 'story';
+    if (hasGratitude) return 'gratitude';
+    if (wordCount <= 6) return 'short';
+    return 'general';
+  }
+
+  const TEMPLATES = {
+    gratitude: [
+      (e, n) => `${greet(n)}Thank you so much for this${e ? ` — especially what you said about ${e}` : ''}. What's shifted for you since ${e ? 'then' : 'watching'}?`,
+      (e, n) => `${greet(n)}This made our day.${e ? ` The part about ${e} really stuck with us.` : ''} What's been the biggest takeaway for you so far?`,
+      (e, n) => `${greet(n)}We're so grateful you took the time to share this.${e ? ` Especially ${e} —` : ''} what drew you to this video in the first place?`,
+      (e, n) => `${greet(n)}Thank you!${e ? ` Hearing about ${e} means a lot.` : ''} Is there a topic you'd love us to dig into next?`
+    ],
+    story: [
+      (e, n) => `${greet(n)}Thank you for trusting us with that.${e ? ` What you shared about ${e} really lands.` : ''} How are you feeling about it these days?`,
+      (e, n) => `${greet(n)}That's a big share, and we don't take it lightly.${e ? ` ${cap(e)} sounds like it's been quite a journey.` : ''} What's the next step looking like for you?`,
+      (e, n) => `${greet(n)}It means a lot that you shared this with us.${e ? ` ${cap(e)} —` : ''} what's changed the most for you since then?`,
+      (e, n) => `${greet(n)}Thank you for opening up like that.${e ? ` We're sitting with what you said about ${e}.` : ''} What's been most helpful for you along the way?`
+    ],
+    question: [
+      (e, n) => `${greet(n)}Great question!${e ? ` Before we jump in — on ${e},` : ' Before we jump in —'} what's your gut telling you already?`,
+      (e, n) => `${greet(n)}Love that you asked. What made you curious about ${e || 'that'} specifically?`,
+      (e, n) => `${greet(n)}That's a good one.${e ? ` On ${e} —` : ''} have you noticed anything yourself that points toward an answer?`,
+      (e, n) => `${greet(n)}Appreciate you asking!${e ? ` Quick one back on ${e} —` : ''} is this something you're working through right now, or more out of curiosity?`
+    ],
+    short: [
+      (e, n) => `${greet(n)}Thank you! What part landed the most for you?`,
+      (e, n) => `${greet(n)}Appreciate you watching! Anything you'd like us to go deeper on next time?`,
+      (e, n) => `${greet(n)}Means a lot, thank you. What brought you to this one?`,
+      (e, n) => `${greet(n)}So glad it resonated! What's on your mind these days?`
+    ],
+    general: [
+      (e, n) => `${greet(n)}Thank you for sharing that.${e ? ` ${cap(e)} really stood out.` : ''} What's on your mind about it now?`,
+      (e, n) => `${greet(n)}Appreciate you taking the time to comment.${e ? ` ${cap(e)} —` : ''} what made you think of that?`,
+      (e, n) => `${greet(n)}Thanks for this!${e ? ` We hear you on ${e}.` : ''} What would be most helpful to explore next?`,
+      (e, n) => `${greet(n)}Really glad this reached you.${e ? ` Curious about ${e} —` : ''} how long has that been on your mind?`
+    ]
+  };
+
+  function normalize(str) {
+    return str.replace(/\s+/g, ' ').replace(/\s+([,.!?])/g, '$1').trim();
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  function buildReplies(comment, name) {
+    const echo = extractEcho(comment);
+    const category = classify(comment);
+    const primaryPool = TEMPLATES[category];
+    const fallbackPool = TEMPLATES.general.filter(fn => !primaryPool.includes(fn));
+
+    const pool = shuffle(primaryPool).slice(0, 3);
+    if (pool.length < 3 && fallbackPool.length) {
+      pool.push(...shuffle(fallbackPool).slice(0, 3 - pool.length));
+    }
+
+    return pool.map(fn => normalize(fn(echo, name)));
+  }
+
+  function renderResults(replies) {
+    resultsEl.innerHTML = '';
+    replies.forEach((text) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const p = document.createElement('p');
+      p.textContent = text;
+
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copy';
+      btn.addEventListener('click', () => copyText(text, btn));
+
+      card.appendChild(p);
+      card.appendChild(btn);
+      resultsEl.appendChild(card);
+    });
+    regenWrap.style.display = replies.length ? 'flex' : 'none';
+  }
+
+  function copyText(text, btn) {
+    const done = () => {
+      const original = btn.textContent;
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = original;
+        btn.classList.remove('copied');
+      }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+    } else {
+      fallbackCopy(text, done);
+    }
+  }
+
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (e) { /* no-op */ }
+    document.body.removeChild(ta);
+    done();
+  }
+
+  function generate() {
+    const comment = commentEl.value.trim();
+    if (!comment) {
+      commentEl.focus();
+      return;
+    }
+    const name = nameEl.value.trim();
+    renderResults(buildReplies(comment, name));
+  }
+
+  generateBtn.addEventListener('click', generate);
+  regenBtn.addEventListener('click', generate);
+  commentEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) generate();
+  });
+})();
+</script>
+</body>
+</html>
